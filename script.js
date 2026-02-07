@@ -24,36 +24,67 @@ function parseAgentBlock(block) {
     const agent = { name: '', funktion: '', quelle: '', model: '', beschreibung: '', systemPrompt: '' };
 
     let i = 0;
-    // Parse metadata lines
+    // Parse metadata lines with length validation
     while (i < lines.length) {
         const line = lines[i].trim();
-        if (line.startsWith('- **Name:**'))     { agent.name     = line.replace('- **Name:**', '').trim(); i++; continue; }
-        if (line.startsWith('- **Funktion:**')) { agent.funktion  = line.replace('- **Funktion:**', '').trim(); i++; continue; }
-        if (line.startsWith('- **Quelle:**'))   { agent.quelle    = line.replace('- **Quelle:**', '').trim(); i++; continue; }
-        if (line.startsWith('- **Model:**'))    { agent.model     = line.replace('- **Model:**', '').trim(); i++; continue; }
+        if (line.startsWith('- **Name:**')) {
+            agent.name = line.replace('- **Name:**', '').trim().substring(0, 200);
+            i++;
+            continue;
+        }
+        if (line.startsWith('- **Funktion:**')) {
+            agent.funktion = line.replace('- **Funktion:**', '').trim().substring(0, 500);
+            i++;
+            continue;
+        }
+        if (line.startsWith('- **Quelle:**')) {
+            agent.quelle = line.replace('- **Quelle:**', '').trim().substring(0, 200);
+            i++;
+            continue;
+        }
+        if (line.startsWith('- **Model:**')) {
+            agent.model = line.replace('- **Model:**', '').trim().substring(0, 50);
+            i++;
+            continue;
+        }
         break;
     }
 
-    // Collect description (everything before the code block)
+    // Collect description (everything before the code block) with size limit
     const descLines = [];
+    let descCharCount = 0;
+    const maxDescLength = 5000;
+
     while (i < lines.length && !lines[i].trim().startsWith('```')) {
-        descLines.push(lines[i]);
+        const line = lines[i];
+        if (descCharCount + line.length > maxDescLength) break;
+        descLines.push(line);
+        descCharCount += line.length;
         i++;
     }
     agent.beschreibung = descLines.join('\n').trim();
 
-    // Extract system prompt (inside code block)
+    // Extract system prompt (inside code block) with size limit
     if (i < lines.length && lines[i].trim().startsWith('```')) {
         i++; // skip opening ```
         const promptLines = [];
+        let promptCharCount = 0;
+        const maxPromptLength = 20000;
+
         while (i < lines.length && !lines[i].trim().startsWith('```')) {
-            promptLines.push(lines[i]);
+            const line = lines[i];
+            if (promptCharCount + line.length > maxPromptLength) break;
+            promptLines.push(line);
+            promptCharCount += line.length;
             i++;
         }
         agent.systemPrompt = promptLines.join('\n');
     }
 
-    return agent.name ? agent : null;
+    // Validate agent has required fields
+    if (!agent.name || agent.name.length === 0) return null;
+
+    return agent;
 }
 
 // --- Card Rendering ---
@@ -127,8 +158,15 @@ function openModal(agent) {
         <span><span class="text-gray-600">Model:</span> <span style="color:${mc.color}">${escapeHtml(agent.model)}</span></span>
     `;
 
-    // Render description as sanitized HTML
-    const descHtml = DOMPurify.sanitize(marked.parse(agent.beschreibung));
+    // Render description as sanitized HTML with strict config
+    const sanitizeConfig = {
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li', 'h3', 'h4', 'a', 'blockquote'],
+        ALLOWED_ATTR: ['href', 'class'],
+        ALLOWED_URI_REGEXP: /^(?:(?:https?):\/\/)/i,
+        ALLOW_DATA_ATTR: false,
+        ALLOW_UNKNOWN_PROTOCOLS: false
+    };
+    const descHtml = DOMPurify.sanitize(marked.parse(agent.beschreibung), sanitizeConfig);
 
     // Render system prompt
     const promptHtml = `
@@ -173,11 +211,58 @@ document.addEventListener('keydown', (e) => {
 
 // --- Init ---
 
+// Simple rate limiting for init function
+let initAttempts = 0;
+const maxInitAttempts = 3;
+const initTimeout = 10000; // 10 seconds
+
 async function init() {
+    // Prevent excessive init calls
+    initAttempts++;
+    if (initAttempts > maxInitAttempts) {
+        console.error('Maximum initialization attempts exceeded');
+        document.getElementById('loading').innerHTML = `
+            <p class="text-red-400 font-mono text-sm">Zu viele Ladeversuche</p>
+            <p class="text-gray-600 font-mono text-xs mt-2">Bitte warte einen Moment und lade dann die Seite neu.</p>
+        `;
+        return;
+    }
     try {
-        const response = await fetch('agents.md');
+        // Validate file path to prevent path traversal
+        const filePath = 'agents.md';
+        if (!/^[a-zA-Z0-9_-]+\.md$/.test(filePath)) {
+            throw new Error('Invalid file path');
+        }
+
+        // Fetch with timeout protection
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const response = await fetch(filePath, {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'text/plain'
+            },
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        // Validate content type
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('text')) {
+            throw new Error('Invalid content type');
+        }
+
         const mdText = await response.text();
+
+        // Validate response size (prevent DoS via large files)
+        if (mdText.length > 1000000) { // 1MB limit
+            throw new Error('Response too large');
+        }
         const agents = parseAgents(mdText);
 
         const grid = document.getElementById('agent-grid');
@@ -197,7 +282,8 @@ async function init() {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('grid-container').classList.remove('hidden');
     } catch (err) {
-        console.error('Fehler beim Laden der Agenten:', err);
+        // Log minimal error info to console (production-safe)
+        console.error('Failed to load agents data');
         document.getElementById('loading').innerHTML = `
             <p class="text-red-400 font-mono text-sm">Fehler beim Laden der Agentendaten</p>
             <p class="text-gray-600 font-mono text-xs mt-2">Bitte lade die Seite neu.</p>

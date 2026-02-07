@@ -1,0 +1,5 @@
+Contact: https://github.com/555worb/KI_AGENTS_LIST/security/advisories/new
+Preferred-Languages: en, de
+Canonical: https://ki-agents-list.vercel.app/.well-known/security.txt
+Policy: https://github.com/555worb/KI_AGENTS_LIST/blob/main/SECURITY.md
+Acknowledgments: https://github.com/555worb/KI_AGENTS_LIST/blob/main/SECURITY.md#acknowledgments

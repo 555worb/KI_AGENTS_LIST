@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /.well-known/
+Disallow: /.git/
+Disallow: /.vercel/
+
+# Security file
+Allow: /.well-known/security.txt
+
+# Sitemap
+Sitemap: https://ki-agents-list.vercel.app/sitemap.xml
