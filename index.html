@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KI Agents List — Claude Code Subagents</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        neon: {
+                            cyan: '#00fff2',
+                            magenta: '#ff00e5',
+                            green: '#39ff14',
+                            red: '#ff3366',
+                        },
+                        dark: {
+                            bg: '#0a0a0a',
+                            card: '#111113',
+                            border: '#1e1e22',
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        * { box-sizing: border-box; }
+
+        body {
+            background: #0a0a0a;
+            color: #e0e0e0;
+            overflow-x: hidden;
+        }
+
+        /* Scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0, 255, 242, 0.015) 2px,
+                rgba(0, 255, 242, 0.015) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Grid background */
+        .grid-bg {
+            background-image:
+                linear-gradient(rgba(0,255,242,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,242,0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        /* Agent card */
+        .agent-card {
+            background: linear-gradient(135deg, #111113 0%, #0d0d10 100%);
+            border: 1px solid #1e1e22;
+            border-radius: 12px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .agent-card::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: 12px;
+            padding: 1px;
+            background: linear-gradient(135deg, transparent 40%, var(--glow-color, #00fff2) 100%);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .agent-card:hover::before {
+            opacity: 1;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 0 30px -10px var(--glow-color, #00fff2);
+            border-color: var(--glow-color, #00fff2);
+        }
+
+        .agent-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--glow-color, #00fff2);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .agent-card:hover::after {
+            opacity: 1;
+            box-shadow: 0 0 20px var(--glow-color, #00fff2);
+        }
+
+        /* Model badges */
+        .badge-opus { color: #ff3366; border-color: #ff3366; text-shadow: 0 0 8px rgba(255,51,102,0.5); }
+        .badge-sonnet { color: #00fff2; border-color: #00fff2; text-shadow: 0 0 8px rgba(0,255,242,0.5); }
+        .badge-haiku { color: #39ff14; border-color: #39ff14; text-shadow: 0 0 8px rgba(57,255,20,0.5); }
+        .badge-inherit { color: #a0a0b0; border-color: #a0a0b0; }
+
+        /* Modal */
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal-content {
+            background: linear-gradient(180deg, #13131a 0%, #0a0a0f 100%);
+            border: 1px solid #2a2a35;
+            border-radius: 16px;
+            transform: translateY(20px) scale(0.95);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: translateY(0) scale(1);
+        }
+
+        .modal-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .modal-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .modal-content::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 3px;
+        }
+
+        /* Code block styling in modal */
+        .modal-body pre {
+            background: #0d0d12 !important;
+            border: 1px solid #1e1e28;
+            border-radius: 8px;
+            padding: 1.25rem;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            line-height: 1.6;
+            color: #c8c8d4;
+        }
+
+        .modal-body code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85em;
+        }
+
+        .modal-body p code {
+            background: #1a1a24;
+            padding: 0.15em 0.4em;
+            border-radius: 4px;
+            color: #00fff2;
+        }
+
+        .modal-body strong {
+            color: #fff;
+        }
+
+        .modal-body ul, .modal-body ol {
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+        }
+
+        .modal-body li {
+            margin: 0.25rem 0;
+            color: #b0b0c0;
+        }
+
+        .modal-body h3, .modal-body h4 {
+            color: #e0e0f0;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Glow text */
+        .glow-cyan { text-shadow: 0 0 10px rgba(0,255,242,0.5), 0 0 40px rgba(0,255,242,0.2); }
+        .glow-magenta { text-shadow: 0 0 10px rgba(255,0,229,0.5), 0 0 40px rgba(255,0,229,0.2); }
+
+        /* Pulse animation for header */
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        .pulse-glow {
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        /* Loading spinner */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #1e1e22;
+            border-top-color: #00fff2;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+    </style>
+</head>
+<body class="min-h-screen font-sans grid-bg">
+
+    <!-- Header -->
+    <header class="relative py-12 px-6 text-center border-b border-dark-border">
+        <div class="absolute inset-0 bg-gradient-to-b from-neon-cyan/5 to-transparent pointer-events-none"></div>
+        <h1 class="relative text-4xl md:text-5xl font-bold tracking-tight">
+            <span class="text-white">KI</span>
+            <span class="text-neon-cyan glow-cyan">_</span>
+            <span class="text-white">AGENTS</span>
+            <span class="text-neon-cyan glow-cyan">_</span>
+            <span class="text-white">LIST</span>
+        </h1>
+        <p class="relative mt-4 text-sm md:text-base text-gray-500 font-mono tracking-widest uppercase">
+            <span class="text-neon-cyan/60 pulse-glow">&gt;</span> 12 Claude Code Subagent-Konfigurationen
+            <span class="text-neon-cyan/60 pulse-glow">_</span>
+        </p>
+        <p class="relative mt-2 text-xs text-gray-600 font-mono">
+            Anthropic-Docs &middot; GitHub Community &middot; Battle-tested Prompts
+        </p>
+    </header>
+
+    <!-- Loading State -->
+    <div id="loading" class="flex flex-col items-center justify-center py-32 gap-4">
+        <div class="spinner"></div>
+        <p class="text-gray-500 font-mono text-sm">Lade Agenten...</p>
+    </div>
+
+    <!-- Agent Grid -->
+    <main id="grid-container" class="hidden max-w-7xl mx-auto px-4 sm:px-6 py-10">
+        <div id="agent-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div id="modal-overlay" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="modal-content w-full max-w-3xl p-0">
+            <!-- Modal header -->
+            <div id="modal-header" class="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-dark-border bg-[#13131a]/95 backdrop-blur-sm rounded-t-2xl">
+                <div class="flex items-center gap-3">
+                    <span id="modal-model-badge" class="text-xs font-mono font-semibold px-2.5 py-1 border rounded-full uppercase tracking-wider"></span>
+                    <h2 id="modal-title" class="text-xl font-semibold text-white font-mono"></h2>
+                </div>
+                <button id="modal-close" class="text-gray-500 hover:text-white transition-colors p-1" aria-label="Schließen">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <!-- Modal meta -->
+            <div id="modal-meta" class="px-6 py-3 border-b border-dark-border flex flex-wrap gap-4 text-xs font-mono text-gray-500">
+            </div>
+            <!-- Modal body -->
+            <div id="modal-body" class="modal-body px-6 py-6 text-sm leading-relaxed text-gray-300">
+            </div>
+        </div>
+    </div>
+
+    <footer class="text-center py-8 border-t border-dark-border">
+        <p class="text-xs text-gray-600 font-mono">
+            <span class="text-neon-cyan/40">//</span> Kuratiert aus Anthropic-Docs, contains-studio, bartsmykla, iannuttall
+        </p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

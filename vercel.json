@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    { "source": "/((?!.*\\.md$)(?!.*\\.js$)(?!.*\\.css$)(?!.*\\.ico$).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)\\.md",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" }
+      ]
+    }
+  ]
+}
