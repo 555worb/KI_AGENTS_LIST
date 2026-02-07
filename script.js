@@ -127,8 +127,8 @@ function openModal(agent) {
         <span><span class="text-gray-600">Model:</span> <span style="color:${mc.color}">${escapeHtml(agent.model)}</span></span>
     `;
 
-    // Render description as HTML
-    const descHtml = marked.parse(agent.beschreibung);
+    // Render description as sanitized HTML
+    const descHtml = DOMPurify.sanitize(marked.parse(agent.beschreibung));
 
     // Render system prompt
     const promptHtml = `
@@ -197,9 +197,10 @@ async function init() {
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('grid-container').classList.remove('hidden');
     } catch (err) {
+        console.error('Fehler beim Laden der Agenten:', err);
         document.getElementById('loading').innerHTML = `
-            <p class="text-red-400 font-mono text-sm">Fehler beim Laden: ${escapeHtml(err.message)}</p>
-            <p class="text-gray-600 font-mono text-xs mt-2">Stelle sicher, dass agents.md im gleichen Verzeichnis liegt.</p>
+            <p class="text-red-400 font-mono text-sm">Fehler beim Laden der Agentendaten</p>
+            <p class="text-gray-600 font-mono text-xs mt-2">Bitte lade die Seite neu.</p>
         `;
     }
 }
